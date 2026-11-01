@@ -119,6 +119,14 @@
           </select>
         </div>
 
+        <!-- Asset Section Shortcut Button -->
+        <a href="#sectionAssets" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition" title="Lihat Aset yang Dimiliki">
+          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+          <span class="hidden md:inline">Aset</span>
+        </a>
+
         <!-- Category Manager Button -->
         <button id="btnOpenCategories" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition" title="Manajemen Kategori">
           <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -221,21 +229,27 @@
         <form id="transactionForm" class="space-y-4" novalidate>
           <input type="hidden" id="txId" value="" />
 
-          <!-- Jenis Transaksi Toggle -->
+          <!-- Jenis Transaksi Toggle (Pengeluaran / Pemasukan / Transfer Aset) -->
           <div>
             <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Jenis Transaksi</label>
-            <div class="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl">
-              <button type="button" data-type="Pengeluaran" class="tx-type-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-1.5 bg-rose-600 text-white shadow-sm">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <div class="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
+              <button type="button" data-type="Pengeluaran" class="tx-type-btn py-2.5 px-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-1 bg-rose-600 text-white shadow-sm">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M17 13l-5 5m0 0l-5-5m5 5V6" />
                 </svg>
                 <span>Pengeluaran</span>
               </button>
-              <button type="button" data-type="Pemasukan" class="tx-type-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-900">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <button type="button" data-type="Pemasukan" class="tx-type-btn py-2.5 px-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-1 text-slate-600 hover:text-slate-900">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M7 11l5-5m0 0l5 5m-5-5v12" />
                 </svg>
                 <span>Pemasukan</span>
+              </button>
+              <button type="button" data-type="Transfer" class="tx-type-btn py-2.5 px-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-1 text-slate-600 hover:text-slate-900">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                <span>Transfer</span>
               </button>
             </div>
             <input type="hidden" id="txType" value="Pengeluaran" />
@@ -269,7 +283,7 @@
             </div>
           </div>
 
-          <!-- Tanggal & Kategori -->
+          <!-- Tanggal & Kategori (Mode Pengeluaran / Pemasukan) -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div>
               <label for="txDate" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
@@ -283,7 +297,7 @@
               />
             </div>
 
-            <div>
+            <div id="standardCategoryField">
               <div class="flex items-center justify-between mb-1.5">
                 <label for="txCategory" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
                   Kategori <span class="text-rose-500">*</span>
@@ -298,6 +312,82 @@
                 class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-medium text-slate-800 bg-white outline-none transition"
               >
               </select>
+            </div>
+          </div>
+
+          <!-- Pilih Rekening / Aset untuk Pemasukan & Pengeluaran -->
+          <div id="standardAssetField">
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="txAssetId" id="txAssetLabel" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                Potong dari Aset / Rekening <span class="text-slate-400 font-normal lowercase">(opsional)</span>
+              </label>
+              <button type="button" id="btnQuickManageAsset" class="text-[11px] font-semibold text-emerald-600 hover:text-emerald-700">
+                + Tambah Aset
+              </button>
+            </div>
+            <select
+              id="txAssetId"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm font-medium text-slate-800 bg-white outline-none transition"
+            >
+              <option value="">-- Tanpa potong/tambah saldo aset --</option>
+            </select>
+          </div>
+
+          <!-- Field Khusus Mode Transfer Antar Aset (Dari Aset -> Ke Aset + Biaya Admin) -->
+          <div id="transferFieldsContainer" class="hidden space-y-3.5 p-3.5 rounded-xl bg-sky-50/70 border border-sky-200/80">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-sky-900">Perpindahan Saldo Antar Aset / Bank / Kas</span>
+              <button type="button" id="btnSwapTransferAssets" class="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 hover:text-sky-900 bg-white px-2 py-1 rounded-lg border border-sky-200 shadow-2xs transition">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+                <span>Tukar</span>
+              </button>
+            </div>
+
+            <div>
+              <label for="txFromAssetId" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Dari Aset / Rekening Asal <span class="text-rose-500">*</span>
+              </label>
+              <select
+                id="txFromAssetId"
+                class="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:border-sky-500 text-sm font-medium text-slate-800 bg-white outline-none"
+              >
+              </select>
+            </div>
+
+            <div>
+              <label for="txToAssetId" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Ke Aset / Rekening Tujuan <span class="text-rose-500">*</span>
+              </label>
+              <select
+                id="txToAssetId"
+                class="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:border-sky-500 text-sm font-medium text-slate-800 bg-white outline-none"
+              >
+              </select>
+            </div>
+
+            <div>
+              <label for="txAdminFeeDisplay" class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Biaya Admin Transfer <span class="text-slate-400 font-normal lowercase">(opsional, memotong aset asal)</span>
+              </label>
+              <div class="relative">
+                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-xs pointer-events-none">Rp</span>
+                <input
+                  type="text"
+                  id="txAdminFeeDisplay"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  placeholder="0"
+                  class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 focus:border-sky-500 text-sm font-bold text-slate-800 bg-white outline-none"
+                />
+                <input type="hidden" id="txAdminFee" value="0" />
+              </div>
+              <div class="flex flex-wrap gap-1.5 mt-1.5">
+                <button type="button" data-admin-fee="0" class="quick-admin-btn text-[11px] font-medium px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:bg-slate-100 text-slate-600">Gratis (Rp 0)</button>
+                <button type="button" data-admin-fee="2500" class="quick-admin-btn text-[11px] font-medium px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:bg-slate-100 text-slate-600">BI-Fast 2,5 rb</button>
+                <button type="button" data-admin-fee="6500" class="quick-admin-btn text-[11px] font-medium px-2 py-0.5 rounded-md bg-white border border-slate-200 hover:bg-slate-100 text-slate-600">Admin 6,5 rb</button>
+              </div>
             </div>
           </div>
 
@@ -383,6 +473,143 @@
 
     </div>
 
+    <!-- Section 2.5: Aset & Kekayaan yang Dimiliki Selama Ini (All-Time Net Worth & Portfolio) -->
+    <section id="sectionAssets" class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 sm:p-6 scroll-mt-20">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 class="text-base sm:text-lg font-bold text-slate-900">Aset &amp; Kekayaan Dimiliki Selama Ini</h2>
+            <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              All-Time
+            </span>
+          </div>
+          <p class="text-xs text-slate-500 mt-0.5">
+            Akumulasi seluruh aset pribadi (rekening, e-wallet, investasi, emas, properti) &amp; saldo kas lintas waktu
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2 no-print">
+          <select id="filterAssetCategory" aria-label="Filter Kategori Aset" class="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-xs sm:text-sm font-medium text-slate-700 outline-none">
+            <option value="all">Semua Kategori Aset</option>
+            <option value="Kas & Bank">Kas &amp; Bank</option>
+            <option value="E-Wallet">E-Wallet</option>
+            <option value="Investasi">Investasi</option>
+            <option value="Emas & Logam Mulia">Emas &amp; Logam Mulia</option>
+            <option value="Aset Fisik & Properti">Aset Fisik &amp; Properti</option>
+            <option value="Lainnya">Lainnya</option>
+          </select>
+
+          <button
+            id="btnQuickTransferFromAsset"
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-bold shadow-sm transition shrink-0"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            <span>Transfer Aset</span>
+          </button>
+
+          <button
+            id="btnOpenAssetModal"
+            type="button"
+            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs sm:text-sm font-bold shadow-sm transition shrink-0"
+          >
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Tambah Aset</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Summary Cards Kekayaan & Aset Selama Ini -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+        <!-- Total Kekayaan Bersih (Total Aset Tercatat + Opsi Info Kas) -->
+        <div class="rounded-2xl bg-gradient-to-br from-emerald-900 via-slate-900 to-slate-900 text-white p-4 sm:p-5 border border-emerald-800/40 shadow-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-emerald-300/90">Total Nilai Aset Dimiliki</span>
+            <span class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </span>
+          </div>
+          <p id="assetTotalValue" class="text-2xl sm:text-3xl font-extrabold tracking-tight mt-2">Rp 0</p>
+          <div class="mt-2.5 flex items-center justify-between text-xs text-slate-300">
+            <span id="assetCountLabel">0 item aset tercatat</span>
+            <span id="assetTopCategoryBadge" class="px-2 py-0.5 rounded-full bg-white/10 text-[11px]">-</span>
+          </div>
+        </div>
+
+        <!-- Aset Likuid vs Investasi & Fisik -->
+        <div class="rounded-2xl bg-slate-50 p-4 sm:p-5 border border-slate-200/80 flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Aset Likuid vs Investasi/Fisik</span>
+            <span class="w-8 h-8 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </span>
+          </div>
+          <div class="mt-2 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-500 font-medium">Likuid (Kas/Bank/E-Wallet):</span>
+              <span id="assetLiquidValue" class="font-bold text-slate-800">Rp 0</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-500 font-medium">Investasi, Emas &amp; Fisik:</span>
+              <span id="assetNonLiquidValue" class="font-bold text-emerald-600">Rp 0</span>
+            </div>
+          </div>
+          <p id="assetLiquidRatioText" class="text-[11px] text-slate-400 mt-2.5">Komposisi likuiditas: 0% likuid</p>
+        </div>
+
+        <!-- Akumulasi Saldo Transaksi Selama Ini (All-Time Cashflow Net) -->
+        <div class="rounded-2xl bg-slate-50 p-4 sm:p-5 border border-slate-200/80 flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Akumulasi Kas Transaksi (All-Time)</span>
+            <span class="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </span>
+          </div>
+          <p id="allTimeNetCashflow" class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 mt-2">Rp 0</p>
+          <p id="allTimeCashflowSubtext" class="text-[11px] text-slate-500 mt-2.5 truncate">
+            Total Masuk Rp 0 &bull; Total Keluar Rp 0
+          </p>
+        </div>
+      </div>
+
+      <!-- Bar Komposisi Kategori Aset -->
+      <div id="assetAllocationContainer" class="mb-5 p-4 rounded-xl bg-slate-50 border border-slate-200/70">
+        <div class="flex items-center justify-between text-xs font-semibold text-slate-600 mb-2">
+          <span>Proporsi Portofolio Aset</span>
+          <span id="assetAllocationSubtitle" class="text-slate-400 font-normal">100%</span>
+        </div>
+        <div id="assetAllocationBar" class="w-full h-3 rounded-full bg-slate-200 overflow-hidden flex gap-0.5"></div>
+        <div id="assetAllocationLegend" class="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs"></div>
+      </div>
+
+      <!-- Grid Daftar Aset yang Dimiliki -->
+      <div id="assetCardsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+      </div>
+
+      <!-- Empty State Aset -->
+      <div id="assetEmptyState" class="hidden py-10 text-center border border-dashed border-slate-200 rounded-2xl">
+        <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-500 flex items-center justify-center mx-auto mb-2.5">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+        </div>
+        <p class="text-sm font-semibold text-slate-700">Belum ada aset yang dicatat</p>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+          Catat saldo rekening bank, tabungan, e-wallet, emas, reksa dana, atau aset barang untuk memantau total kekayaan Anda.
+        </p>
+      </div>
+    </section>
+
     <!-- Section 3: Riwayat & Tabel Data Transaksi -->
     <section class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-5 sm:p-6">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
@@ -411,6 +638,7 @@
             <option value="all">Semua Jenis</option>
             <option value="Pengeluaran">Pengeluaran</option>
             <option value="Pemasukan">Pemasukan</option>
+            <option value="Transfer">Transfer Aset</option>
           </select>
 
           <!-- Export CSV -->
@@ -577,6 +805,104 @@
           Simpan Pengaturan
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 3: TAMBAH / EDIT ASET YANG DIMILIKI
+       ========================================================= -->
+  <div id="assetModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full shadow-xl border border-slate-200 overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 id="assetModalTitle" class="font-bold text-slate-900 text-base">Tambah Aset Baru</h3>
+          <p class="text-xs text-slate-500">Catat atau perbarui nilai aset yang Anda miliki saat ini</p>
+        </div>
+        <button type="button" id="btnCloseAssetModal" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <form id="assetForm" class="p-5 space-y-4" novalidate>
+        <input type="hidden" id="assetId" value="" />
+
+        <div>
+          <label for="assetName" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+            Nama Aset / Akun <span class="text-rose-500">*</span>
+          </label>
+          <input
+            type="text"
+            id="assetName"
+            maxlength="60"
+            required
+            placeholder="Contoh: Tabungan BCA, Bibit Reksa Dana, Emas Antam 5g..."
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-sm text-slate-800 outline-none"
+          />
+        </div>
+
+        <div>
+          <label for="assetCategory" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+            Kategori Aset <span class="text-rose-500">*</span>
+          </label>
+          <select
+            id="assetCategory"
+            required
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 text-sm font-medium text-slate-800 bg-white outline-none"
+          >
+            <option value="Kas & Bank">Kas &amp; Bank (Rekening / Tunai / Deposito)</option>
+            <option value="E-Wallet">E-Wallet (GoPay / OVO / Dana / ShopeePay)</option>
+            <option value="Investasi">Investasi (Reksa Dana / Saham / SBN / Crypto)</option>
+            <option value="Emas & Logam Mulia">Emas &amp; Logam Mulia</option>
+            <option value="Aset Fisik & Properti">Aset Fisik &amp; Properti (Kendaraan / Gadget / Properti)</option>
+            <option value="Lainnya">Lainnya (Piutang / Dana Darurat)</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="assetValueDisplay" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+            Nilai / Saldo Saat Ini (Rp) <span class="text-rose-500">*</span>
+          </label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 font-bold text-sm pointer-events-none">Rp</span>
+            <input
+              type="text"
+              id="assetValueDisplay"
+              inputmode="numeric"
+              autocomplete="off"
+              placeholder="0"
+              required
+              class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 text-base font-bold text-slate-900 outline-none"
+            />
+            <input type="hidden" id="assetValue" value="" />
+          </div>
+        </div>
+
+        <div>
+          <label for="assetNote" class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">
+            Keterangan / Catatan <span class="text-slate-400 font-normal lowercase">(opsional)</span>
+          </label>
+          <input
+            type="text"
+            id="assetNote"
+            maxlength="100"
+            placeholder="Contoh: Dana darurat, 5 gram @ Rp 1,4jt, Rekening utama..."
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 text-sm text-slate-800 outline-none"
+          />
+        </div>
+
+        <div id="assetFormError" class="hidden rounded-xl bg-rose-50 border border-rose-200 px-3.5 py-2 text-xs font-medium text-rose-700"></div>
+
+        <div class="pt-2 flex items-center justify-end gap-2">
+          <button type="button" id="btnCancelAssetModal" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold">
+            Batal
+          </button>
+          <button type="submit" id="btnSaveAsset" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm transition">
+            Simpan Aset
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

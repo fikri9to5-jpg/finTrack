@@ -51,6 +51,15 @@ Aplikasi pencatatan keuangan ini dirancang sebagai alat bantu pribadi untuk mema
 * Kategori dasar bawaan (Makan, Transportasi, Tagihan, Hiburan, Gaji).
 * Kemampuan menambah atau mengubah nama kategori sesuai pola pengeluaran pribadi.
 
+**E. Pelacakan Aset, Kekayaan (All-Time Net Worth) & Mutasi Antar Aset**
+
+* Menampilkan akumulasi kekayaan yang dimiliki selama ini (lintas bulan/tahun):
+  * **Total Nilai Aset:** Akumulasi nilai dari seluruh aset yang dicatat pengguna.
+  * **Akumulasi Saldo Arus Kas (All-Time):** Selisih total pemasukan dan pengeluaran dari seluruh riwayat transaksi selama ini.
+  * **Komposisi Aset:** Rincian aset berdasarkan jenisnya (*Kas & Bank*, *E-Wallet*, *Investasi*, *Emas & Logam Mulia*, *Aset Fisik & Properti*).
+* **Transfer / Perpindahan Antar Aset:** Mencatat perpindahan dana dari satu aset/bank ke aset/bank/kas lainnya (otomatis memotong saldo aset asal dan menambah saldo aset tujuan tanpa menggelembungkan pemasukan/pengeluaran bulanan), lengkap dengan dukungan **Biaya Admin Transfer** opsional.
+* **Integrasi Transaksi dengan Saldo Aset:** Setiap pemasukan/pengeluaran dapat dikaitkan langsung ke akun aset/rekening tertentu sehingga saldonya ter-update otomatis (termasuk *rollback* saldo otomatis saat transaksi diedit atau dihapus).
+
 ### 4. Rekomendasi Arsitektur & Tech Stack
 
 Mengingat aplikasi ini untuk kebutuhan pribadi yang mengutamakan kelincahan, kustomisasi tinggi, dan tanpa biaya *server*:

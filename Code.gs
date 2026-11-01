@@ -7,6 +7,7 @@
 
 const SHEET_TRANSAKSI = 'Transaksi';
 const SHEET_KATEGORI = 'Kategori';
+const SHEET_ASET = 'Aset';
 
 const DEFAULT_CATEGORIES_SEED = [
   ['cat-makan', 'Makan', 'Pengeluaran', '#f43f5e', true],
@@ -30,8 +31,21 @@ function ensureDatabaseSheets() {
   let txSheet = ss.getSheetByName(SHEET_TRANSAKSI);
   if (!txSheet) {
     txSheet = ss.insertSheet(SHEET_TRANSAKSI);
-    txSheet.appendRow(['ID', 'Tanggal', 'Jenis', 'Kategori', 'Nominal', 'Catatan', 'CreatedAt']);
-    txSheet.getRange('A1:G1').setFontWeight('bold').setBackground('#0f172a').setFontColor('#ffffff');
+    txSheet.appendRow([
+      'ID',
+      'Tanggal',
+      'Jenis',
+      'Kategori',
+      'Nominal',
+      'Catatan',
+      'CreatedAt',
+      'AssetID',
+      'AssetName',
+      'FromAssetID',
+      'ToAssetID',
+      'AdminFee',
+    ]);
+    txSheet.getRange('A1:L1').setFontWeight('bold').setBackground('#0f172a').setFontColor('#ffffff');
     txSheet.setFrozenRows(1);
   }
 
@@ -46,7 +60,16 @@ function ensureDatabaseSheets() {
     DEFAULT_CATEGORIES_SEED.forEach((row) => catSheet.appendRow(row));
   }
 
-  return { txSheet, catSheet };
+  // 3. Sheet Aset (Pelacakan Aset & Kekayaan Dimiliki)
+  let assetSheet = ss.getSheetByName(SHEET_ASET);
+  if (!assetSheet) {
+    assetSheet = ss.insertSheet(SHEET_ASET);
+    assetSheet.appendRow(['ID', 'Nama', 'Kategori', 'Nilai', 'Catatan', 'UpdatedAt']);
+    assetSheet.getRange('A1:F1').setFontWeight('bold').setBackground('#0f172a').setFontColor('#ffffff');
+    assetSheet.setFrozenRows(1);
+  }
+
+  return { txSheet, catSheet, assetSheet };
 }
 
 /**
@@ -111,22 +134,41 @@ function handleClientRequest(request) {
       return deleteTransaction(payload.id);
     case 'saveCategories':
       return saveCategories(payload.categories);
+    case 'addAsset':
+      return addAsset(payload);
+    case 'updateAsset':
+      return updateAsset(payload);
+    case 'deleteAsset':
+      return deleteAsset(payload.id);
     default:
       return { success: false, error: 'Action tidak dikenali: ' + action };
   }
 }
 
 /**
- * Mengambil seluruh data Transaksi dan Kategori dari Google Sheets
+ * Mengambil seluruh data Transaksi, Kategori, dan Aset dari Google Sheets
  */
 function getAllData() {
-  const { txSheet, catSheet } = ensureDatabaseSheets();
+  const { txSheet, catSheet, assetSheet } = ensureDatabaseSheets();
 
   // Baca Transaksi
   const txValues = txSheet.getDataRange().getValues();
   const transactions = [];
   for (let i = 1; i < txValues.length; i++) {
-    const [id, rawDate, type, category, amount, note, createdAt] = txValues[i];
+    const [
+      id,
+      rawDate,
+      type,
+      category,
+      amount,
+      note,
+      createdAt,
+      assetId,
+      assetName,
+      fromAssetId,
+      toAssetId,
+      adminFee,
+    ] = txValues[i];
     if (!id) continue;
 
     let formattedDate = rawDate;
@@ -144,6 +186,11 @@ function getAllData() {
       amount: Number(amount) || 0,
       note: String(note || ''),
       createdAt: String(createdAt || ''),
+      assetId: String(assetId || ''),
+      assetName: String(assetName || ''),
+      fromAssetId: String(fromAssetId || ''),
+      toAssetId: String(toAssetId || ''),
+      adminFee: Number(adminFee) || 0,
     });
   }
 
@@ -162,10 +209,35 @@ function getAllData() {
     });
   }
 
+  // Baca Aset
+  const assetValues = assetSheet.getDataRange().getValues();
+  const assets = [];
+  for (let i = 1; i < assetValues.length; i++) {
+    const [id, name, category, value, note, updatedAt] = assetValues[i];
+    if (!id && !name) continue;
+
+    let formattedUpdated = updatedAt;
+    if (updatedAt instanceof Date) {
+      formattedUpdated = Utilities.formatDate(updatedAt, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    } else {
+      formattedUpdated = String(updatedAt || '').slice(0, 10);
+    }
+
+    assets.push({
+      id: String(id || 'ast-' + i),
+      name: String(name || 'Aset'),
+      category: String(category || 'Kas & Bank'),
+      value: Number(value) || 0,
+      note: String(note || ''),
+      updatedAt: formattedUpdated,
+    });
+  }
+
   return {
     success: true,
     transactions: transactions.reverse(),
     categories,
+    assets,
   };
 }
 
@@ -182,6 +254,11 @@ function addTransaction(tx) {
     Number(tx.amount) || 0,
     tx.note || '',
     tx.createdAt || new Date().toISOString(),
+    tx.assetId || '',
+    tx.assetName || '',
+    tx.fromAssetId || '',
+    tx.toAssetId || '',
+    Number(tx.adminFee) || 0,
   ]);
   return { success: true };
 }
@@ -196,7 +273,7 @@ function updateTransaction(tx) {
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]) === String(tx.id)) {
       txSheet
-        .getRange(i + 1, 1, 1, 7)
+        .getRange(i + 1, 1, 1, 12)
         .setValues([
           [
             tx.id,
@@ -206,6 +283,11 @@ function updateTransaction(tx) {
             Number(tx.amount) || 0,
             tx.note || '',
             tx.createdAt || new Date().toISOString(),
+            tx.assetId || '',
+            tx.assetName || '',
+            tx.fromAssetId || '',
+            tx.toAssetId || '',
+            Number(tx.adminFee) || 0,
           ],
         ]);
       return { success: true };
@@ -254,4 +336,63 @@ function saveCategories(categories) {
   }
 
   return { success: true };
+}
+
+/**
+ * Menambahkan baris aset baru ke Sheet "Aset"
+ */
+function addAsset(asset) {
+  const { assetSheet } = ensureDatabaseSheets();
+  assetSheet.appendRow([
+    asset.id || 'ast-' + new Date().getTime(),
+    asset.name,
+    asset.category || 'Kas & Bank',
+    Number(asset.value) || 0,
+    asset.note || '',
+    asset.updatedAt || new Date().toISOString().slice(0, 10),
+  ]);
+  return { success: true };
+}
+
+/**
+ * Memperbarui baris aset berdasarkan ID di Sheet "Aset"
+ */
+function updateAsset(asset) {
+  const { assetSheet } = ensureDatabaseSheets();
+  const data = assetSheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(asset.id)) {
+      assetSheet
+        .getRange(i + 1, 1, 1, 6)
+        .setValues([
+          [
+            asset.id,
+            asset.name,
+            asset.category || 'Kas & Bank',
+            Number(asset.value) || 0,
+            asset.note || '',
+            asset.updatedAt || new Date().toISOString().slice(0, 10),
+          ],
+        ]);
+      return { success: true };
+    }
+  }
+  return addAsset(asset);
+}
+
+/**
+ * Menghapus baris aset berdasarkan ID di Sheet "Aset"
+ */
+function deleteAsset(id) {
+  const { assetSheet } = ensureDatabaseSheets();
+  const data = assetSheet.getDataRange().getValues();
+
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      assetSheet.deleteRow(i + 1);
+      return { success: true };
+    }
+  }
+  return { success: false, error: 'ID aset tidak ditemukan' };
 }

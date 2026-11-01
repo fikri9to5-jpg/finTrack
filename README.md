@@ -22,9 +22,14 @@ Aplikasi web pencatatan keuangan pribadi (*single-user*, *mobile-friendly*) yang
 4. **Manajemen Kategori**
    - Kategori dasar bawaan (*Makan*, *Transportasi*, *Tagihan*, *Hiburan*, *Gaji*, dll.).
    - Kemampuan menambah kategori baru, mengubah nama/jenis kategori, atau menghapus kategori.
-5. **Arsitektur Penyimpanan Ganda (Lokal & Google Sheets)**
+5. **Pelacakan Aset, Kekayaan (All-Time Net Worth) & Transfer Antar Aset**
+   - Memantau total kekayaan pribadi lintas waktu: **Total Nilai Portofolio Aset**, perbandingan **Aset Likuid (Kas, Bank, E-Wallet)** vs **Investasi & Aset Fisik**, serta **Akumulasi Kas Transaksi (All-Time)**.
+   - **Transfer / Mutasi Antar Aset:** Memindahkan saldo dari satu rekening/aset ke rekening/kas/e-wallet lain secara otomatis (dengan opsi **Biaya Admin Transfer** seperti BI-Fast `Rp 2.500` yang otomatis dihitung ke pengeluaran tanpa menggelembungkan pemasukan/pengeluaran pokok).
+   - **Integrasi Transaksi ke Saldo Aset:** Pemasukan dan pengeluaran harian dapat dihubungkan ke rekening/dompet tertentu agar saldonya otomatis bertambah/berkurang (dan otomatis *rollback* jika transaksi diedit atau dihapus).
+   - Visualisasi proporsi alokasi aset per kategori (*Kas & Bank*, *E-Wallet*, *Investasi*, *Emas & Logam Mulia*, *Aset Fisik & Properti*, *Lainnya*).
+6. **Arsitektur Penyimpanan Ganda (Lokal & Google Sheets)**
    - Berjalan langsung secara instan menggunakan `localStorage` browser.
-   - Dapat dihubungkan ke **Google Sheets** melalui **Google Apps Script (`Code.gs`)** sebagai *database* relasional sederhana (`Sheet Transaksi` & `Sheet Kategori`).
+   - Dapat dihubungkan ke **Google Sheets** melalui **Google Apps Script (`Code.gs`)** sebagai *database* relasional sederhana (`Sheet Transaksi`, `Sheet Kategori`, & `Sheet Aset`).
 
 ---
 

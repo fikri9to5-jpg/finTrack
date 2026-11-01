@@ -6,8 +6,19 @@
 const STORAGE_KEYS = {
   TRANSACTIONS: 'fintrack_transactions_v1',
   CATEGORIES: 'fintrack_categories_v1',
+  ASSETS: 'fintrack_assets_v1',
   GAS_URL: 'fintrack_gas_webapp_url_v1',
   INITIALIZED: 'fintrack_initialized_v1',
+  ASSETS_INITIALIZED: 'fintrack_assets_initialized_v1',
+};
+
+const ASSET_CATEGORY_META = {
+  'Kas & Bank': { color: '#0ea5e9', badgeBg: 'bg-sky-50 text-sky-700 border-sky-200', isLiquid: true },
+  'E-Wallet': { color: '#06b6d4', badgeBg: 'bg-cyan-50 text-cyan-700 border-cyan-200', isLiquid: true },
+  'Investasi': { color: '#10b981', badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200', isLiquid: false },
+  'Emas & Logam Mulia': { color: '#f59e0b', badgeBg: 'bg-amber-50 text-amber-700 border-amber-200', isLiquid: false },
+  'Aset Fisik & Properti': { color: '#8b5cf6', badgeBg: 'bg-violet-50 text-violet-700 border-violet-200', isLiquid: false },
+  'Lainnya': { color: '#64748b', badgeBg: 'bg-slate-100 text-slate-700 border-slate-200', isLiquid: false },
 };
 
 // Kategori Dasar Bawaan sesuai PRD (Makan, Transportasi, Tagihan, Hiburan, Gaji, dll.)
@@ -47,10 +58,12 @@ const MONTH_NAMES = {
 const state = {
   transactions: [],
   categories: [],
+  assets: [],
   gasUrl: '',
   filterMonth: '',
   filterYear: '',
   filterType: 'all',
+  filterAssetCategory: 'all',
   searchQuery: '',
   chartType: 'doughnut', // 'doughnut' | 'bar'
   chartDataKind: 'Pengeluaran', // 'Pengeluaran' | 'Pemasukan'
@@ -165,10 +178,19 @@ function loadLocalData() {
       seedDemoTransactions(false);
       localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
     }
+
+    const savedAssets = localStorage.getItem(STORAGE_KEYS.ASSETS);
+    if (savedAssets) {
+      state.assets = JSON.parse(savedAssets);
+    } else if (!localStorage.getItem(STORAGE_KEYS.ASSETS_INITIALIZED)) {
+      seedDemoAssets();
+      localStorage.setItem(STORAGE_KEYS.ASSETS_INITIALIZED, 'true');
+    }
   } catch (err) {
     console.error('Gagal memuat data lokal:', err);
     state.categories = [...DEFAULT_CATEGORIES];
     state.transactions = [];
+    state.assets = [];
   }
 }
 
@@ -178,6 +200,10 @@ function saveTransactionsLocal() {
 
 function saveCategoriesLocal() {
   localStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(state.categories));
+}
+
+function saveAssetsLocal() {
+  localStorage.setItem(STORAGE_KEYS.ASSETS, JSON.stringify(state.assets));
 }
 
 function isRunningInGAS() {
@@ -272,6 +298,10 @@ async function syncFromBackend() {
       state.categories = res.categories;
       saveCategoriesLocal();
     }
+    if (Array.isArray(res.assets)) {
+      state.assets = res.assets;
+      saveAssetsLocal();
+    }
     populateYearFilter();
     renderCategoryOptions();
     renderAll();
@@ -282,6 +312,53 @@ async function syncFromBackend() {
 // ============================================================================
 // DEMO DATA SEEDER
 // ============================================================================
+
+function seedDemoAssets() {
+  const today = getTodayISO();
+  state.assets = [
+    {
+      id: generateId('ast'),
+      name: 'Tabungan BCA',
+      category: 'Kas & Bank',
+      value: 18500000,
+      note: 'Rekening operasional & dana darurat',
+      updatedAt: today,
+    },
+    {
+      id: generateId('ast'),
+      name: 'GoPay & ShopeePay',
+      category: 'E-Wallet',
+      value: 1250000,
+      note: 'Saldo dompet digital harian',
+      updatedAt: today,
+    },
+    {
+      id: generateId('ast'),
+      name: 'Reksa Dana Bibit',
+      category: 'Investasi',
+      value: 25000000,
+      note: 'Reksa dana pasar uang & obligasi',
+      updatedAt: today,
+    },
+    {
+      id: generateId('ast'),
+      name: 'Emas Antam (10 gram)',
+      category: 'Emas & Logam Mulia',
+      value: 14200000,
+      note: 'Simpanan logam mulia jangka panjang',
+      updatedAt: today,
+    },
+    {
+      id: generateId('ast'),
+      name: 'MacBook Air M2',
+      category: 'Aset Fisik & Properti',
+      value: 15500000,
+      note: 'Perangkat kerja produktif',
+      updatedAt: today,
+    },
+  ];
+  saveAssetsLocal();
+}
 
 function seedDemoTransactions(notify = true) {
   const today = new Date();
@@ -347,6 +424,9 @@ function seedDemoTransactions(notify = true) {
 
   state.transactions = sample;
   saveTransactionsLocal();
+  if (notify) {
+    seedDemoAssets();
+  }
   populateYearFilter();
   renderAll();
   if (notify) {
@@ -444,6 +524,8 @@ function getFilteredTableTransactions() {
 function renderAll() {
   renderDashboardSummary();
   renderCategoryChart();
+  renderAssetsSection();
+  renderAssetFormOptions();
   renderTransactionHistory();
 }
 
@@ -460,9 +542,15 @@ function renderDashboardSummary() {
     if (tx.type === 'Pemasukan') {
       totalIncome += amt;
       incomeCount++;
-    } else {
+    } else if (tx.type === 'Pengeluaran') {
       totalExpense += amt;
       expenseCount++;
+    } else if (tx.type === 'Transfer') {
+      // Mutasi antar aset tidak menambah pemasukan/pengeluaran, kecuali jika ada biaya admin transfer
+      const fee = Number(tx.adminFee) || 0;
+      if (fee > 0) {
+        totalExpense += fee;
+      }
     }
   });
 
@@ -495,7 +583,7 @@ function renderDashboardSummary() {
 }
 
 function renderCategoryChart() {
-  const periodTx = getPeriodTransactions().filter((tx) => tx.type === state.chartDataKind);
+  const allPeriodTx = getPeriodTransactions();
   const canvas = document.getElementById('categoryChart');
   const emptyState = document.getElementById('chartEmptyState');
   const breakdownContainer = document.getElementById('categoryBreakdownList');
@@ -506,11 +594,20 @@ function renderCategoryChart() {
   const totalsByCategory = {};
   let grandTotal = 0;
 
-  periodTx.forEach((tx) => {
-    const cat = tx.category || 'Lainnya';
-    const amt = Number(tx.amount) || 0;
-    totalsByCategory[cat] = (totalsByCategory[cat] || 0) + amt;
-    grandTotal += amt;
+  allPeriodTx.forEach((tx) => {
+    if (tx.type === state.chartDataKind) {
+      const cat = tx.category || 'Lainnya';
+      const amt = Number(tx.amount) || 0;
+      totalsByCategory[cat] = (totalsByCategory[cat] || 0) + amt;
+      grandTotal += amt;
+    } else if (tx.type === 'Transfer' && state.chartDataKind === 'Pengeluaran') {
+      const fee = Number(tx.adminFee) || 0;
+      if (fee > 0) {
+        const feeCat = 'Biaya Admin Transfer';
+        totalsByCategory[feeCat] = (totalsByCategory[feeCat] || 0) + fee;
+        grandTotal += fee;
+      }
+    }
   });
 
   const sortedEntries = Object.entries(totalsByCategory).sort((a, b) => b[1] - a[1]);
@@ -651,30 +748,61 @@ function renderTransactionHistory() {
   tbody.innerHTML = transactions
     .map((tx) => {
       const isIncome = tx.type === 'Pemasukan';
-      const badgeClass = isIncome
+      const isTransfer = tx.type === 'Transfer';
+
+      const badgeClass = isTransfer
+        ? 'bg-sky-50 text-sky-700 border-sky-200'
+        : isIncome
         ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
         : 'bg-rose-50 text-rose-700 border-rose-200';
-      const amountClass = isIncome ? 'text-emerald-600' : 'text-rose-600';
-      const sign = isIncome ? '+' : '-';
+
+      const amountClass = isTransfer
+        ? 'text-sky-600'
+        : isIncome
+        ? 'text-emerald-600'
+        : 'text-rose-600';
+
+      const sign = isTransfer ? '⇄' : isIncome ? '+' : '-';
+      const adminFee = Number(tx.adminFee) || 0;
+
+      // Info aset terkait (untuk Pemasukan / Pengeluaran)
+      const linkedAsset = tx.assetId ? state.assets.find((a) => a.id === tx.assetId) : null;
+      const assetBadgeHtml = linkedAsset
+        ? `<span class="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80">${escapeHtml(
+            linkedAsset.name
+          )}</span>`
+        : tx.assetName
+        ? `<span class="ml-1.5 inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200/80">${escapeHtml(
+            tx.assetName
+          )}</span>`
+        : '';
 
       return `
         <tr class="hover:bg-slate-50/80 transition group">
           <td class="py-3.5 px-3 whitespace-nowrap font-medium text-slate-700">${formatDateID(tx.date)}</td>
           <td class="py-3.5 px-3 whitespace-nowrap">
-            <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-800">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold ${
+              isTransfer ? 'bg-sky-50 text-sky-900 border border-sky-200' : 'bg-slate-100 text-slate-800'
+            }">
               ${escapeHtml(tx.category)}
             </span>
+            ${!isTransfer ? assetBadgeHtml : ''}
           </td>
           <td class="py-3.5 px-3 text-slate-600 max-w-xs truncate">${
             tx.note ? escapeHtml(tx.note) : '<span class="text-slate-300 italic">Tanpa catatan</span>'
           }</td>
           <td class="py-3.5 px-3 whitespace-nowrap">
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${badgeClass}">
-              ${escapeHtml(tx.type)}
+              ${isTransfer ? 'Transfer Aset' : escapeHtml(tx.type)}
             </span>
           </td>
-          <td class="py-3.5 px-3 whitespace-nowrap text-right font-bold ${amountClass}">
-            ${sign} ${formatRupiah(tx.amount)}
+          <td class="py-3.5 px-3 whitespace-nowrap text-right">
+            <div class="font-bold ${amountClass}">${sign} ${formatRupiah(tx.amount)}</div>
+            ${
+              isTransfer && adminFee > 0
+                ? `<div class="text-[11px] text-rose-500 font-medium">Biaya Admin: -${formatRupiah(adminFee)}</div>`
+                : ''
+            }
           </td>
           <td class="py-3.5 px-3 whitespace-nowrap text-right no-print">
             <div class="inline-flex items-center justify-end gap-1">
@@ -699,16 +827,27 @@ function renderTransactionHistory() {
   mobileList.innerHTML = transactions
     .map((tx) => {
       const isIncome = tx.type === 'Pemasukan';
-      const amountClass = isIncome ? 'text-emerald-600' : 'text-rose-600';
-      const sign = isIncome ? '+' : '-';
+      const isTransfer = tx.type === 'Transfer';
+      const amountClass = isTransfer ? 'text-sky-600' : isIncome ? 'text-emerald-600' : 'text-rose-600';
+      const sign = isTransfer ? '⇄' : isIncome ? '+' : '-';
+      const adminFee = Number(tx.adminFee) || 0;
+      const linkedAsset = tx.assetId ? state.assets.find((a) => a.id === tx.assetId) : null;
+      const assetLabel = linkedAsset ? linkedAsset.name : tx.assetName || '';
 
       return `
         <div class="py-3.5 flex items-center justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <span class="px-2 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-800">${escapeHtml(
-                tx.category
-              )}</span>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded-md text-xs font-bold ${
+                isTransfer ? 'bg-sky-50 text-sky-900 border border-sky-200' : 'bg-slate-100 text-slate-800'
+              }">${escapeHtml(tx.category)}</span>
+              ${
+                !isTransfer && assetLabel
+                  ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">${escapeHtml(
+                      assetLabel
+                    )}</span>`
+                  : ''
+              }
               <span class="text-xs text-slate-400">${formatDateID(tx.date)}</span>
             </div>
             <p class="text-xs text-slate-600 truncate mt-1">${
@@ -717,6 +856,11 @@ function renderTransactionHistory() {
           </div>
           <div class="text-right shrink-0">
             <p class="text-sm font-bold ${amountClass}">${sign} ${formatRupiah(tx.amount)}</p>
+            ${
+              isTransfer && adminFee > 0
+                ? `<p class="text-[10px] text-rose-500 font-medium">Admin -${formatRupiah(adminFee)}</p>`
+                : ''
+            }
             <div class="flex items-center justify-end gap-2 mt-1 no-print">
               <button type="button" data-edit-id="${escapeHtml(tx.id)}" class="text-[11px] font-semibold text-slate-400 hover:text-emerald-600">Edit</button>
               <span class="text-slate-300">&bull;</span>
@@ -730,8 +874,58 @@ function renderTransactionHistory() {
 }
 
 // ============================================================================
-// TRANSACTION FORM & CRUD ACTIONS
+// TRANSACTION FORM & CRUD ACTIONS (TERMASUK TRANSFER ANTAR ASET)
 // ============================================================================
+
+function renderAssetFormOptions() {
+  const txAssetSelect = document.getElementById('txAssetId');
+  const fromSelect = document.getElementById('txFromAssetId');
+  const toSelect = document.getElementById('txToAssetId');
+
+  const currentAssetVal = txAssetSelect ? txAssetSelect.value : '';
+  const currentFromVal = fromSelect ? fromSelect.value : '';
+  const currentToVal = toSelect ? toSelect.value : '';
+
+  const assetOptionsHtml = state.assets
+    .map(
+      (a) =>
+        `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)} (${formatRupiah(a.value)})</option>`
+    )
+    .join('');
+
+  if (txAssetSelect) {
+    txAssetSelect.innerHTML =
+      `<option value="">-- Tanpa potong/tambah saldo aset --</option>` + assetOptionsHtml;
+    if (currentAssetVal && state.assets.some((a) => a.id === currentAssetVal)) {
+      txAssetSelect.value = currentAssetVal;
+    }
+  }
+
+  if (fromSelect && toSelect) {
+    if (state.assets.length === 0) {
+      const emptyOpt = `<option value="">-- Belum ada aset terdaftar --</option>`;
+      fromSelect.innerHTML = emptyOpt;
+      toSelect.innerHTML = emptyOpt;
+    } else {
+      fromSelect.innerHTML = assetOptionsHtml;
+      toSelect.innerHTML = assetOptionsHtml;
+
+      if (currentFromVal && state.assets.some((a) => a.id === currentFromVal)) {
+        fromSelect.value = currentFromVal;
+      } else {
+        fromSelect.value = state.assets[0].id;
+      }
+
+      if (currentToVal && state.assets.some((a) => a.id === currentToVal)) {
+        toSelect.value = currentToVal;
+      } else if (state.assets.length > 1) {
+        toSelect.value = state.assets[1].id;
+      } else {
+        toSelect.value = state.assets[0].id;
+      }
+    }
+  }
+}
 
 function setTransactionTypeUI(type) {
   const hiddenInput = document.getElementById('txType');
@@ -742,24 +936,89 @@ function setTransactionTypeUI(type) {
     if (btnType === type) {
       if (type === 'Pengeluaran') {
         btn.className =
-          'tx-type-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-1.5 bg-rose-600 text-white shadow-sm';
+          'tx-type-btn py-2.5 px-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-1 bg-rose-600 text-white shadow-sm';
+      } else if (type === 'Pemasukan') {
+        btn.className =
+          'tx-type-btn py-2.5 px-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-1 bg-emerald-600 text-white shadow-sm';
       } else {
         btn.className =
-          'tx-type-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-1.5 bg-emerald-600 text-white shadow-sm';
+          'tx-type-btn py-2.5 px-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-1 bg-sky-600 text-white shadow-sm';
       }
     } else {
       btn.className =
-        'tx-type-btn py-2.5 px-3 rounded-lg text-sm font-semibold transition flex items-center justify-center gap-1.5 text-slate-600 hover:text-slate-900';
+        'tx-type-btn py-2.5 px-2 rounded-lg text-xs sm:text-sm font-semibold transition flex items-center justify-center gap-1 text-slate-600 hover:text-slate-900';
     }
   });
 
-  renderCategoryOptions(type);
+  const isTransfer = type === 'Transfer';
+  const standardCategoryField = document.getElementById('standardCategoryField');
+  const standardAssetField = document.getElementById('standardAssetField');
+  const transferFieldsContainer = document.getElementById('transferFieldsContainer');
+  const txAssetLabel = document.getElementById('txAssetLabel');
+
+  if (standardCategoryField) standardCategoryField.classList.toggle('hidden', isTransfer);
+  if (standardAssetField) standardAssetField.classList.toggle('hidden', isTransfer);
+  if (transferFieldsContainer) transferFieldsContainer.classList.toggle('hidden', !isTransfer);
+
+  if (txAssetLabel) {
+    txAssetLabel.innerHTML =
+      type === 'Pemasukan'
+        ? 'Masuk ke Aset / Rekening <span class="text-slate-400 font-normal lowercase">(opsional)</span>'
+        : 'Potong dari Aset / Rekening <span class="text-slate-400 font-normal lowercase">(opsional)</span>';
+  }
+
+  renderAssetFormOptions();
+  if (!isTransfer) {
+    renderCategoryOptions(type);
+  }
+}
+
+/**
+ * Menerapkan atau membatalkan (rollback) efek transaksi terhadap saldo Aset
+ * @param {Object} tx - Objek transaksi
+ * @param {number} direction - 1 untuk terapkan, -1 untuk batalkan (rollback)
+ * @returns {Array} Daftar aset yang mengalami perubahan saldo
+ */
+function applyTransactionEffectOnAssets(tx, direction = 1) {
+  if (!tx) return [];
+  const modifiedAssets = [];
+  const amt = Number(tx.amount) || 0;
+  const fee = Number(tx.adminFee) || 0;
+
+  if (tx.type === 'Transfer') {
+    const fromAsset = state.assets.find((a) => a.id === tx.fromAssetId);
+    const toAsset = state.assets.find((a) => a.id === tx.toAssetId);
+
+    if (fromAsset) {
+      fromAsset.value = (Number(fromAsset.value) || 0) - direction * (amt + fee);
+      fromAsset.updatedAt = getTodayISO();
+      modifiedAssets.push(fromAsset);
+    }
+    if (toAsset) {
+      toAsset.value = (Number(toAsset.value) || 0) + direction * amt;
+      toAsset.updatedAt = getTodayISO();
+      modifiedAssets.push(toAsset);
+    }
+  } else if (tx.assetId) {
+    const targetAsset = state.assets.find((a) => a.id === tx.assetId);
+    if (targetAsset) {
+      const sign = tx.type === 'Pemasukan' ? 1 : -1;
+      targetAsset.value = (Number(targetAsset.value) || 0) + direction * sign * amt;
+      targetAsset.updatedAt = getTodayISO();
+      modifiedAssets.push(targetAsset);
+    }
+  }
+
+  if (modifiedAssets.length > 0) {
+    saveAssetsLocal();
+  }
+  return modifiedAssets;
 }
 
 function renderCategoryOptions(selectedType = null, selectedCategoryName = null) {
   const type = selectedType || document.getElementById('txType')?.value || 'Pengeluaran';
   const select = document.getElementById('txCategory');
-  if (!select) return;
+  if (!select || type === 'Transfer') return;
 
   const filtered = state.categories.filter((c) => c.type === type);
   if (filtered.length === 0) {
@@ -782,6 +1041,13 @@ function resetTransactionForm() {
   document.getElementById('txAmount').value = '';
   document.getElementById('txDate').value = getTodayISO();
   document.getElementById('txNote').value = '';
+  const assetSelect = document.getElementById('txAssetId');
+  if (assetSelect) assetSelect.value = '';
+  const adminFeeDisplay = document.getElementById('txAdminFeeDisplay');
+  const adminFeeHidden = document.getElementById('txAdminFee');
+  if (adminFeeDisplay) adminFeeDisplay.value = '';
+  if (adminFeeHidden) adminFeeHidden.value = '0';
+
   document.getElementById('formTitle').textContent = 'Catat Transaksi Cepat';
   document.getElementById('btnSubmitText').textContent = 'Simpan Transaksi';
   document.getElementById('btnCancelEdit').classList.add('hidden');
@@ -811,10 +1077,9 @@ async function handleTransactionSubmit(e) {
   const type = document.getElementById('txType').value;
   const amountRaw = Number(document.getElementById('txAmount').value);
   const date = document.getElementById('txDate').value;
-  const category = document.getElementById('txCategory').value;
   const note = document.getElementById('txNote').value.trim();
 
-  // Validasi Form sesuai PRD
+  // Validasi Umum
   if (!amountRaw || amountRaw <= 0) {
     showFormError('Nominal wajib diisi dengan angka lebih dari Rp 0.');
     document.getElementById('txAmountDisplay').focus();
@@ -825,13 +1090,59 @@ async function handleTransactionSubmit(e) {
     document.getElementById('txDate').focus();
     return;
   }
-  if (!category) {
-    showFormError('Silakan pilih kategori terlebih dahulu.');
-    document.getElementById('txCategory').focus();
-    return;
+
+  let category = '';
+  let assetId = '';
+  let assetName = '';
+  let fromAssetId = '';
+  let toAssetId = '';
+  let adminFee = 0;
+
+  if (type === 'Transfer') {
+    if (state.assets.length < 2) {
+      showFormError('Minimal harus ada 2 aset terdaftar untuk melakukan transfer antar aset.');
+      return;
+    }
+    fromAssetId = document.getElementById('txFromAssetId').value;
+    toAssetId = document.getElementById('txToAssetId').value;
+    adminFee = Number(document.getElementById('txAdminFee').value) || 0;
+
+    if (!fromAssetId || !toAssetId) {
+      showFormError('Pilih aset asal dan aset tujuan terlebih dahulu.');
+      return;
+    }
+    if (fromAssetId === toAssetId) {
+      showFormError('Aset asal dan aset tujuan tidak boleh sama.');
+      return;
+    }
+
+    const fromObj = state.assets.find((a) => a.id === fromAssetId);
+    const toObj = state.assets.find((a) => a.id === toAssetId);
+    category = `${fromObj ? fromObj.name : 'Aset Asal'} → ${toObj ? toObj.name : 'Aset Tujuan'}`;
+  } else {
+    category = document.getElementById('txCategory').value;
+    if (!category) {
+      showFormError('Silakan pilih kategori terlebih dahulu.');
+      document.getElementById('txCategory').focus();
+      return;
+    }
+    assetId = document.getElementById('txAssetId')?.value || '';
+    if (assetId) {
+      const foundAsset = state.assets.find((a) => a.id === assetId);
+      assetName = foundAsset ? foundAsset.name : '';
+    }
   }
 
   const isEdit = Boolean(id);
+  const oldTx = isEdit ? state.transactions.find((t) => t.id === id) : null;
+
+  // Jika mode edit, batalkan (rollback) efek transaksi lama terhadap saldo aset terlebih dahulu
+  const affectedAssetsMap = new Map();
+  if (oldTx) {
+    const rolledBack = applyTransactionEffectOnAssets(oldTx, -1);
+    rolledBack.forEach((a) => affectedAssetsMap.set(a.id, a));
+  }
+
   const txRecord = {
     id: isEdit ? id : generateId('tx'),
     date,
@@ -839,10 +1150,17 @@ async function handleTransactionSubmit(e) {
     category,
     amount: amountRaw,
     note,
-    createdAt: isEdit
-      ? state.transactions.find((t) => t.id === id)?.createdAt || new Date().toISOString()
-      : new Date().toISOString(),
+    assetId,
+    assetName,
+    fromAssetId,
+    toAssetId,
+    adminFee,
+    createdAt: oldTx?.createdAt || new Date().toISOString(),
   };
+
+  // Terapkan efek transaksi baru terhadap saldo aset
+  const applied = applyTransactionEffectOnAssets(txRecord, 1);
+  applied.forEach((a) => affectedAssetsMap.set(a.id, a));
 
   if (isEdit) {
     const idx = state.transactions.findIndex((t) => t.id === id);
@@ -869,10 +1187,19 @@ async function handleTransactionSubmit(e) {
   resetTransactionForm();
   renderAll();
 
-  showToast(isEdit ? 'Transaksi berhasil diperbarui!' : 'Transaksi berhasil disimpan!');
+  showToast(
+    isEdit
+      ? 'Transaksi & saldo aset berhasil diperbarui!'
+      : type === 'Transfer'
+      ? 'Perpindahan aset berhasil dicatat!'
+      : 'Transaksi berhasil disimpan!'
+  );
 
   // Sinkronkan ke Google Sheets di belakang layar jika terhubung
   await callGasBackend(isEdit ? 'updateTransaction' : 'addTransaction', txRecord);
+  for (const updatedAsset of affectedAssetsMap.values()) {
+    await callGasBackend('updateAsset', updatedAsset);
+  }
 }
 
 function startEditTransaction(id) {
@@ -881,7 +1208,6 @@ function startEditTransaction(id) {
 
   document.getElementById('txId').value = tx.id;
   setTransactionTypeUI(tx.type);
-  renderCategoryOptions(tx.type, tx.category);
 
   const { raw, formatted } = formatDigitsOnly(tx.amount);
   document.getElementById('txAmount').value = raw;
@@ -889,7 +1215,20 @@ function startEditTransaction(id) {
   document.getElementById('txDate').value = tx.date;
   document.getElementById('txNote').value = tx.note || '';
 
-  document.getElementById('formTitle').textContent = 'Edit Transaksi';
+  if (tx.type === 'Transfer') {
+    if (tx.fromAssetId) document.getElementById('txFromAssetId').value = tx.fromAssetId;
+    if (tx.toAssetId) document.getElementById('txToAssetId').value = tx.toAssetId;
+    const feeObj = formatDigitsOnly(tx.adminFee || 0);
+    document.getElementById('txAdminFee').value = feeObj.raw || '0';
+    document.getElementById('txAdminFeeDisplay').value = feeObj.formatted || '';
+  } else {
+    renderCategoryOptions(tx.type, tx.category);
+    const assetSelect = document.getElementById('txAssetId');
+    if (assetSelect) assetSelect.value = tx.assetId || '';
+  }
+
+  document.getElementById('formTitle').textContent =
+    tx.type === 'Transfer' ? 'Edit Transfer Aset' : 'Edit Transaksi';
   document.getElementById('btnSubmitText').textContent = 'Perbarui Transaksi';
   document.getElementById('btnCancelEdit').classList.remove('hidden');
   hideFormError();
@@ -901,12 +1240,23 @@ async function deleteTransaction(id) {
   const tx = state.transactions.find((t) => t.id === id);
   if (!tx) return;
 
+  // Kembalikan (rollback) saldo aset jika transaksi ini terkait dengan aset
+  const affectedAssets = applyTransactionEffectOnAssets(tx, -1);
+
   state.transactions = state.transactions.filter((t) => t.id !== id);
   saveTransactionsLocal();
   renderAll();
-  showToast('Transaksi dihapus', 'info');
+  showToast(
+    affectedAssets.length > 0
+      ? 'Transaksi dihapus & saldo aset telah dikembalikan'
+      : 'Transaksi dihapus',
+    'info'
+  );
 
   await callGasBackend('deleteTransaction', { id });
+  for (const updatedAsset of affectedAssets) {
+    await callGasBackend('updateAsset', updatedAsset);
+  }
 }
 
 // ============================================================================
@@ -1022,6 +1372,269 @@ async function handleCategorySubmit(e) {
 }
 
 // ============================================================================
+// ASSET & NET WORTH MODULE (ALL-TIME)
+// ============================================================================
+
+function renderAssetsSection() {
+  const totalValueEl = document.getElementById('assetTotalValue');
+  if (!totalValueEl) return;
+
+  // 1. Hitung Total Aset, Likuid vs Non-Likuid, dan Agregasi per Kategori Aset
+  let totalAssetsValue = 0;
+  let liquidValue = 0;
+  let nonLiquidValue = 0;
+  const byCategory = {};
+
+  state.assets.forEach((asset) => {
+    const val = Number(asset.value) || 0;
+    const cat = asset.category || 'Lainnya';
+    totalAssetsValue += val;
+    byCategory[cat] = (byCategory[cat] || 0) + val;
+
+    const meta = ASSET_CATEGORY_META[cat] || ASSET_CATEGORY_META['Lainnya'];
+    if (meta.isLiquid) {
+      liquidValue += val;
+    } else {
+      nonLiquidValue += val;
+    }
+  });
+
+  // 2. Hitung Akumulasi Kas Transaksi Selama Ini (All-Time)
+  let allTimeIncome = 0;
+  let allTimeExpense = 0;
+  state.transactions.forEach((tx) => {
+    const amt = Number(tx.amount) || 0;
+    if (tx.type === 'Pemasukan') {
+      allTimeIncome += amt;
+    } else if (tx.type === 'Pengeluaran') {
+      allTimeExpense += amt;
+    } else if (tx.type === 'Transfer') {
+      allTimeExpense += Number(tx.adminFee) || 0;
+    }
+  });
+  const allTimeNet = allTimeIncome - allTimeExpense;
+
+  // 3. Render Summary Cards Aset
+  totalValueEl.textContent = formatRupiah(totalAssetsValue);
+  document.getElementById('assetCountLabel').textContent = `${state.assets.length} item aset tercatat`;
+
+  const sortedAssetCats = Object.entries(byCategory).sort((a, b) => b[1] - a[1]);
+  const topCatBadge = document.getElementById('assetTopCategoryBadge');
+  if (sortedAssetCats.length > 0 && totalAssetsValue > 0) {
+    const [topCatName, topCatVal] = sortedAssetCats[0];
+    const topPct = Math.round((topCatVal / totalAssetsValue) * 100);
+    topCatBadge.textContent = `Terbesar: ${topCatName} (${topPct}%)`;
+  } else {
+    topCatBadge.textContent = 'Belum ada aset';
+  }
+
+  document.getElementById('assetLiquidValue').textContent = formatRupiah(liquidValue);
+  document.getElementById('assetNonLiquidValue').textContent = formatRupiah(nonLiquidValue);
+  const liquidPct = totalAssetsValue > 0 ? Math.round((liquidValue / totalAssetsValue) * 100) : 0;
+  document.getElementById('assetLiquidRatioText').textContent =
+    totalAssetsValue > 0
+      ? `Komposisi: ${liquidPct}% aset likuid & ${100 - liquidPct}% investasi/fisik`
+      : 'Komposisi likuiditas: 0% likuid';
+
+  const allTimeEl = document.getElementById('allTimeNetCashflow');
+  allTimeEl.textContent = formatRupiah(allTimeNet);
+  allTimeEl.className = `text-xl sm:text-2xl font-extrabold tracking-tight mt-2 ${
+    allTimeNet < 0 ? 'text-rose-600' : 'text-slate-900'
+  }`;
+  document.getElementById('allTimeCashflowSubtext').textContent = `Masuk ${formatRupiah(
+    allTimeIncome
+  )} • Keluar ${formatRupiah(allTimeExpense)}`;
+
+  // 4. Render Bar Proporsi Portofolio Aset
+  const allocationContainer = document.getElementById('assetAllocationContainer');
+  const allocationBar = document.getElementById('assetAllocationBar');
+  const allocationLegend = document.getElementById('assetAllocationLegend');
+
+  if (totalAssetsValue <= 0 || sortedAssetCats.length === 0) {
+    allocationContainer.classList.add('hidden');
+  } else {
+    allocationContainer.classList.remove('hidden');
+    allocationBar.innerHTML = sortedAssetCats
+      .map(([catName, val]) => {
+        const pct = ((val / totalAssetsValue) * 100).toFixed(1);
+        const color = (ASSET_CATEGORY_META[catName] || ASSET_CATEGORY_META['Lainnya']).color;
+        return `<div class="h-full transition-all duration-500" style="width: ${Math.max(
+          2,
+          Number(pct)
+        )}%; background-color: ${color}" title="${escapeHtml(catName)}: ${formatRupiah(val)} (${pct}%)"></div>`;
+      })
+      .join('');
+
+    allocationLegend.innerHTML = sortedAssetCats
+      .map(([catName, val]) => {
+        const pct = ((val / totalAssetsValue) * 100).toFixed(1);
+        const color = (ASSET_CATEGORY_META[catName] || ASSET_CATEGORY_META['Lainnya']).color;
+        return `
+          <div class="inline-flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: ${color}"></span>
+            <span class="font-semibold text-slate-700">${escapeHtml(catName)}</span>
+            <span class="text-slate-400">(${pct}%)</span>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  // 5. Render Grid Daftar Aset
+  const gridEl = document.getElementById('assetCardsGrid');
+  const emptyEl = document.getElementById('assetEmptyState');
+
+  const filteredAssets = state.assets
+    .filter((a) => state.filterAssetCategory === 'all' || a.category === state.filterAssetCategory)
+    .sort((a, b) => (Number(b.value) || 0) - (Number(a.value) || 0));
+
+  if (filteredAssets.length === 0) {
+    gridEl.innerHTML = '';
+    emptyEl.classList.remove('hidden');
+    return;
+  }
+
+  emptyEl.classList.add('hidden');
+  gridEl.innerHTML = filteredAssets
+    .map((asset) => {
+      const val = Number(asset.value) || 0;
+      const pct = totalAssetsValue > 0 ? ((val / totalAssetsValue) * 100).toFixed(1) : '0.0';
+      const meta = ASSET_CATEGORY_META[asset.category] || ASSET_CATEGORY_META['Lainnya'];
+
+      return `
+        <div class="rounded-xl border border-slate-200/90 bg-white hover:border-slate-300 p-4 flex flex-col justify-between transition shadow-2xs">
+          <div>
+            <div class="flex items-start justify-between gap-2">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${meta.badgeBg}">
+                ${escapeHtml(asset.category)}
+              </span>
+              <div class="flex items-center gap-1 no-print">
+                <button type="button" data-edit-asset="${escapeHtml(asset.id)}" class="p-1 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition" title="Update Nilai / Edit Aset">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+                <button type="button" data-delete-asset="${escapeHtml(asset.id)}" class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Hapus Aset">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base mt-2 truncate">${escapeHtml(asset.name)}</h3>
+            <p class="text-lg sm:text-xl font-extrabold text-slate-900 mt-1">${formatRupiah(val)}</p>
+            <p class="text-xs text-slate-500 mt-1 line-clamp-1">${
+              asset.note ? escapeHtml(asset.note) : '<span class="text-slate-300 italic">Tanpa keterangan</span>'
+            }</p>
+          </div>
+
+          <div class="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+            <span>Diperbarui: ${formatDateID(asset.updatedAt || getTodayISO())}</span>
+            <span class="font-semibold text-slate-600">${pct}% dari total aset</span>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function openAssetModal(editAsset = null) {
+  const modal = document.getElementById('assetModal');
+  if (!modal) return;
+
+  const errEl = document.getElementById('assetFormError');
+  if (errEl) errEl.classList.add('hidden');
+
+  if (editAsset) {
+    document.getElementById('assetModalTitle').textContent = 'Perbarui Aset';
+    document.getElementById('assetId').value = editAsset.id;
+    document.getElementById('assetName').value = editAsset.name;
+    document.getElementById('assetCategory').value = editAsset.category || 'Kas & Bank';
+    const { raw, formatted } = formatDigitsOnly(editAsset.value);
+    document.getElementById('assetValue').value = raw;
+    document.getElementById('assetValueDisplay').value = formatted;
+    document.getElementById('assetNote').value = editAsset.note || '';
+  } else {
+    document.getElementById('assetModalTitle').textContent = 'Tambah Aset Baru';
+    document.getElementById('assetId').value = '';
+    document.getElementById('assetName').value = '';
+    document.getElementById('assetCategory').value = 'Kas & Bank';
+    document.getElementById('assetValue').value = '';
+    document.getElementById('assetValueDisplay').value = '';
+    document.getElementById('assetNote').value = '';
+  }
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  setTimeout(() => document.getElementById('assetName')?.focus(), 50);
+}
+
+function closeAssetModal() {
+  const modal = document.getElementById('assetModal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+async function handleAssetSubmit(e) {
+  e.preventDefault();
+  const id = document.getElementById('assetId').value.trim();
+  const name = document.getElementById('assetName').value.trim();
+  const category = document.getElementById('assetCategory').value;
+  const value = Number(document.getElementById('assetValue').value);
+  const note = document.getElementById('assetNote').value.trim();
+  const errEl = document.getElementById('assetFormError');
+
+  if (!name) {
+    errEl.textContent = 'Nama aset wajib diisi.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (isNaN(value) || value <= 0) {
+    errEl.textContent = 'Nilai aset wajib diisi lebih dari Rp 0.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const isEdit = Boolean(id);
+  const record = {
+    id: isEdit ? id : generateId('ast'),
+    name,
+    category,
+    value,
+    note,
+    updatedAt: getTodayISO(),
+  };
+
+  if (isEdit) {
+    const idx = state.assets.findIndex((a) => a.id === id);
+    if (idx !== -1) state.assets[idx] = record;
+  } else {
+    state.assets.push(record);
+  }
+
+  saveAssetsLocal();
+  closeAssetModal();
+  renderAll();
+  showToast(isEdit ? `Aset "${name}" berhasil diperbarui!` : `Aset "${name}" berhasil ditambahkan!`);
+
+  await callGasBackend(isEdit ? 'updateAsset' : 'addAsset', record);
+}
+
+async function deleteAsset(id) {
+  const target = state.assets.find((a) => a.id === id);
+  if (!target) return;
+
+  state.assets = state.assets.filter((a) => a.id !== id);
+  saveAssetsLocal();
+  renderAll();
+  showToast(`Aset "${target.name}" dihapus`, 'info');
+
+  await callGasBackend('deleteAsset', { id });
+}
+
+// ============================================================================
 // EXPORT CSV & PRINT PDF
 // ============================================================================
 
@@ -1104,6 +1717,51 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Live Rupiah Formatting pada Input Biaya Admin Transfer & Quick Admin Chips
+  const adminFeeDisplay = document.getElementById('txAdminFeeDisplay');
+  const adminFeeHidden = document.getElementById('txAdminFee');
+  if (adminFeeDisplay && adminFeeHidden) {
+    adminFeeDisplay.addEventListener('input', (e) => {
+      const { raw, formatted } = formatDigitsOnly(e.target.value);
+      adminFeeHidden.value = raw || '0';
+      adminFeeDisplay.value = formatted;
+    });
+  }
+
+  document.querySelectorAll('.quick-admin-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const val = btn.getAttribute('data-admin-fee');
+      if (val === '0') {
+        if (adminFeeHidden) adminFeeHidden.value = '0';
+        if (adminFeeDisplay) adminFeeDisplay.value = '';
+      } else {
+        const { raw, formatted } = formatDigitsOnly(val);
+        if (adminFeeHidden) adminFeeHidden.value = raw;
+        if (adminFeeDisplay) adminFeeDisplay.value = formatted;
+      }
+    });
+  });
+
+  // Tombol Tukar Aset Asal & Tujuan pada Form Transfer
+  document.getElementById('btnSwapTransferAssets')?.addEventListener('click', () => {
+    const fromSelect = document.getElementById('txFromAssetId');
+    const toSelect = document.getElementById('txToAssetId');
+    if (fromSelect && toSelect) {
+      const temp = fromSelect.value;
+      fromSelect.value = toSelect.value;
+      toSelect.value = temp;
+    }
+  });
+
+  // Tombol Pintasan Tambah Aset & Transfer Aset
+  document.getElementById('btnQuickManageAsset')?.addEventListener('click', () => openAssetModal(null));
+  document.getElementById('btnQuickTransferFromAsset')?.addEventListener('click', () => {
+    resetTransactionForm();
+    setTransactionTypeUI('Transfer');
+    document.getElementById('transactionForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => document.getElementById('txAmountDisplay')?.focus(), 300);
+  });
+
   // Submit Form Transaksi
   document.getElementById('transactionForm')?.addEventListener('submit', handleTransactionSubmit);
 
@@ -1169,6 +1827,41 @@ document.addEventListener('DOMContentLoaded', () => {
   // Export CSV & Cetak PDF
   document.getElementById('btnExportCsv')?.addEventListener('click', exportToCSV);
   document.getElementById('btnPrintPdf')?.addEventListener('click', () => window.print());
+
+  // Modal & Aksi Manajemen Aset (All-Time)
+  document.getElementById('btnOpenAssetModal')?.addEventListener('click', () => openAssetModal(null));
+  document.getElementById('btnCloseAssetModal')?.addEventListener('click', closeAssetModal);
+  document.getElementById('btnCancelAssetModal')?.addEventListener('click', closeAssetModal);
+  document.getElementById('assetForm')?.addEventListener('submit', handleAssetSubmit);
+
+  const assetValueDisplay = document.getElementById('assetValueDisplay');
+  const assetValueHidden = document.getElementById('assetValue');
+  if (assetValueDisplay && assetValueHidden) {
+    assetValueDisplay.addEventListener('input', (e) => {
+      const { raw, formatted } = formatDigitsOnly(e.target.value);
+      assetValueHidden.value = raw;
+      assetValueDisplay.value = formatted;
+    });
+  }
+
+  document.getElementById('filterAssetCategory')?.addEventListener('change', (e) => {
+    state.filterAssetCategory = e.target.value;
+    renderAssetsSection();
+  });
+
+  document.getElementById('assetCardsGrid')?.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('[data-edit-asset]');
+    if (editBtn) {
+      const id = editBtn.getAttribute('data-edit-asset');
+      const asset = state.assets.find((a) => a.id === id);
+      if (asset) openAssetModal(asset);
+      return;
+    }
+    const delBtn = e.target.closest('[data-delete-asset]');
+    if (delBtn) {
+      deleteAsset(delBtn.getAttribute('data-delete-asset'));
+    }
+  });
 
   // Modal Manajemen Kategori
   document.getElementById('btnOpenCategories')?.addEventListener('click', openCategoryModal);
@@ -1254,9 +1947,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btnClearAllData')?.addEventListener('click', () => {
     state.transactions = [];
+    state.assets = [];
     saveTransactionsLocal();
+    saveAssetsLocal();
     renderAll();
     closeSettings();
-    showToast('Semua data transaksi lokal telah dihapus', 'info');
+    showToast('Semua data transaksi & aset lokal telah dihapus', 'info');
   });
 });
