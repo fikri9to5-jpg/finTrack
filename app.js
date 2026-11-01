@@ -10,6 +10,7 @@ const STORAGE_KEYS = {
   GAS_URL: 'fintrack_gas_webapp_url_v1',
   INITIALIZED: 'fintrack_initialized_v1',
   ASSETS_INITIALIZED: 'fintrack_assets_initialized_v1',
+  HIDE_AMOUNTS: 'fintrack_hide_amounts_v1',
 };
 
 const ASSET_CATEGORY_META = {
@@ -68,6 +69,8 @@ const state = {
   chartType: 'doughnut', // 'doughnut' | 'bar'
   chartDataKind: 'Pengeluaran', // 'Pengeluaran' | 'Pemasukan'
   chartInstance: null,
+  hideAmounts: false,
+  activeMobileTab: 'beranda', // 'beranda' | 'riwayat' | 'aset'
 };
 
 // ============================================================================
@@ -85,8 +88,110 @@ function getTodayISO() {
 function formatRupiah(amount) {
   const num = Number(amount) || 0;
   const isNegative = num < 0;
+  if (state.hideAmounts) {
+    return `${isNegative ? '- ' : ''}Rp •••••••`;
+  }
   const formatted = new Intl.NumberFormat('id-ID').format(Math.abs(Math.round(num)));
   return `${isNegative ? '- ' : ''}Rp ${formatted}`;
+}
+
+function updatePrivacyToggleUI() {
+  const iconOpen = document.getElementById('iconEyeOpen');
+  const iconOff = document.getElementById('iconEyeOff');
+  const label = document.getElementById('privacyBtnText');
+  const btn = document.getElementById('btnTogglePrivacy');
+
+  if (iconOpen && iconOff) {
+    iconOpen.classList.toggle('hidden', state.hideAmounts);
+    iconOff.classList.toggle('hidden', !state.hideAmounts);
+  }
+  if (label) {
+    label.textContent = state.hideAmounts ? 'Tampilkan' : 'Sembunyikan';
+  }
+  if (btn) {
+    btn.title = state.hideAmounts ? 'Tampilkan Angka Nominal' : 'Sembunyikan Angka Nominal';
+  }
+}
+
+function togglePrivacyMode() {
+  state.hideAmounts = !state.hideAmounts;
+  localStorage.setItem(STORAGE_KEYS.HIDE_AMOUNTS, String(state.hideAmounts));
+  updatePrivacyToggleUI();
+  renderAll();
+}
+
+/**
+ * Mengatur perpindahan Tab pada layar Mobile (< lg), sementara di Desktop (lg:) semua bagian tetap tampil
+ * @param {'beranda' | 'riwayat' | 'aset'} tabName
+ */
+function switchMobileTab(tabName) {
+  state.activeMobileTab = tabName;
+
+  const sectionSummary = document.getElementById('sectionSummary');
+  const sectionGridInputChart = document.getElementById('sectionGridInputChart');
+  const sectionInput = document.getElementById('sectionInput');
+  const sectionChart = document.getElementById('sectionChart');
+  const sectionAssets = document.getElementById('sectionAssets');
+  const sectionHistory = document.getElementById('sectionHistory');
+
+  // Atur visibilitas tiap bagian pada layar mobile (< lg)
+  if (sectionSummary) {
+    sectionSummary.className = tabName === 'aset' ? 'hidden lg:block' : 'block';
+  }
+  if (sectionGridInputChart) {
+    sectionGridInputChart.className =
+      tabName === 'aset'
+        ? 'hidden lg:grid grid-cols-1 lg:grid-cols-12 gap-6 items-start'
+        : 'grid grid-cols-1 lg:grid-cols-12 gap-6 items-start';
+  }
+  if (sectionInput) {
+    sectionInput.className =
+      tabName === 'beranda'
+        ? 'block lg:col-span-5 bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-6 no-print'
+        : 'hidden lg:block lg:col-span-5 bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-6 no-print';
+  }
+  if (sectionChart) {
+    sectionChart.className =
+      tabName === 'riwayat'
+        ? 'block lg:col-span-7 bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-6'
+        : 'hidden lg:block lg:col-span-7 bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-6';
+  }
+  if (sectionHistory) {
+    sectionHistory.className =
+      tabName === 'riwayat'
+        ? 'block bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-6'
+        : 'hidden lg:block bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-6';
+  }
+  if (sectionAssets) {
+    sectionAssets.className =
+      tabName === 'aset'
+        ? 'block bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-6 scroll-mt-20'
+        : 'hidden lg:block bg-white rounded-2xl shadow-sm border border-slate-200/80 p-4 sm:p-6 scroll-mt-20';
+  }
+
+  // Update indikator aktif di Bottom Navigation Bar
+  document.querySelectorAll('.mobile-nav-btn').forEach((btn) => {
+    const isActive = btn.getAttribute('data-mobile-tab') === tabName;
+    btn.className = isActive
+      ? 'mobile-nav-btn flex flex-col items-center justify-center gap-1 text-emerald-600 font-bold transition'
+      : 'mobile-nav-btn flex flex-col items-center justify-center gap-1 text-slate-500 font-medium transition';
+
+    const iconWrap = btn.querySelector('.nav-icon-wrap');
+    if (iconWrap) {
+      iconWrap.className = isActive
+        ? 'nav-icon-wrap px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 transition'
+        : 'nav-icon-wrap px-3 py-1 rounded-full transition';
+    }
+  });
+
+  if (tabName === 'riwayat') {
+    // Pastikan grafik Chart.js dirender ulang dengan ukuran kanvas yang tepat saat tab dibuka
+    setTimeout(() => renderCategoryChart(), 20);
+  }
+
+  if (window.innerWidth < 1024) {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 }
 
 function formatDigitsOnly(str) {
@@ -159,6 +264,8 @@ function escapeHtml(str) {
 
 function loadLocalData() {
   try {
+    state.hideAmounts = localStorage.getItem(STORAGE_KEYS.HIDE_AMOUNTS) === 'true';
+
     const savedUrl = localStorage.getItem(STORAGE_KEYS.GAS_URL);
     state.gasUrl = savedUrl ? savedUrl.trim() : '';
 
@@ -686,6 +793,7 @@ function renderCategoryChart() {
               ticks: {
                 font: { size: 10 },
                 callback: (val) => {
+                  if (state.hideAmounts) return '•••';
                   if (val >= 1000000) return `${(val / 1000000).toFixed(1)}jt`;
                   if (val >= 1000) return `${(val / 1000).toFixed(0)}rb`;
                   return val;
@@ -732,6 +840,45 @@ function renderTransactionHistory() {
   const tbody = document.getElementById('transactionTableBody');
   const mobileList = document.getElementById('transactionMobileList');
   const emptyState = document.getElementById('tableEmptyState');
+  const recentPreviewEl = document.getElementById('mobileRecentPreviewList');
+
+  // Render 3 Transaksi Terakhir pada Tab "Catat / Beranda" di Mobile
+  if (recentPreviewEl) {
+    const recent3 = getPeriodTransactions()
+      .slice()
+      .sort((a, b) => {
+        if (b.date !== a.date) return b.date.localeCompare(a.date);
+        return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+      })
+      .slice(0, 3);
+
+    if (recent3.length === 0) {
+      recentPreviewEl.innerHTML = `<p class="py-2 text-slate-400 italic">Belum ada transaksi periode ini.</p>`;
+    } else {
+      recentPreviewEl.innerHTML = recent3
+        .map((tx) => {
+          const isIncome = tx.type === 'Pemasukan';
+          const isTransfer = tx.type === 'Transfer';
+          const amountClass = isTransfer
+            ? 'text-sky-600'
+            : isIncome
+            ? 'text-emerald-600'
+            : 'text-rose-600';
+          const sign = isTransfer ? '⇄' : isIncome ? '+' : '-';
+          return `
+            <div class="py-2 flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <span class="font-semibold text-slate-800">${escapeHtml(tx.category)}</span>
+                <span class="text-slate-400 ml-1">${formatDateID(tx.date)}</span>
+                ${tx.note ? `<p class="text-[11px] text-slate-500 truncate">${escapeHtml(tx.note)}</p>` : ''}
+              </div>
+              <span class="font-bold shrink-0 ${amountClass}">${sign} ${formatRupiah(tx.amount)}</span>
+            </div>
+          `;
+        })
+        .join('');
+    }
+  }
 
   if (!tbody || !mobileList || !emptyState) return;
 
@@ -1205,6 +1352,11 @@ async function handleTransactionSubmit(e) {
 function startEditTransaction(id) {
   const tx = state.transactions.find((t) => t.id === id);
   if (!tx) return;
+
+  // Jika sedang di layar mobile (misal di Tab Riwayat), pindah ke Tab Beranda (Catat) agar form terlihat
+  if (window.innerWidth < 1024 && state.activeMobileTab !== 'beranda') {
+    switchMobileTab('beranda');
+  }
 
   document.getElementById('txId').value = tx.id;
   setTransactionTypeUI(tx.type);
@@ -1681,7 +1833,11 @@ document.addEventListener('DOMContentLoaded', () => {
   initPeriodFilters();
   resetTransactionForm();
   updateSyncStatusUI();
+  updatePrivacyToggleUI();
   renderAll();
+
+  // Toggle Sembunyikan / Tampilkan Angka Nominal (Privacy Mode)
+  document.getElementById('btnTogglePrivacy')?.addEventListener('click', togglePrivacyMode);
 
   // Jika ada koneksi GAS, sinkronkan saat aplikasi dibuka
   if (state.gasUrl || isRunningInGAS()) {
@@ -1756,10 +1912,35 @@ document.addEventListener('DOMContentLoaded', () => {
   // Tombol Pintasan Tambah Aset & Transfer Aset
   document.getElementById('btnQuickManageAsset')?.addEventListener('click', () => openAssetModal(null));
   document.getElementById('btnQuickTransferFromAsset')?.addEventListener('click', () => {
+    if (window.innerWidth < 1024 && state.activeMobileTab !== 'beranda') {
+      switchMobileTab('beranda');
+    }
     resetTransactionForm();
     setTransactionTypeUI('Transfer');
     document.getElementById('transactionForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     setTimeout(() => document.getElementById('txAmountDisplay')?.focus(), 300);
+  });
+
+  // Navigasi Bottom Bar khusus Mobile (Catat, Riwayat, Aset, Kategori, Sheets)
+  document.querySelectorAll('.mobile-nav-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetTab = btn.getAttribute('data-mobile-tab');
+      if (targetTab) switchMobileTab(targetTab);
+    });
+  });
+
+  document.getElementById('btnMobileGoHistory')?.addEventListener('click', () => {
+    switchMobileTab('riwayat');
+  });
+
+  document.getElementById('btnMobileCategories')?.addEventListener('click', openCategoryModal);
+  document.getElementById('btnMobileSettings')?.addEventListener('click', () => {
+    document.getElementById('gasUrlInput').value = state.gasUrl;
+    const sm = document.getElementById('settingsModal');
+    if (sm) {
+      sm.classList.remove('hidden');
+      sm.classList.add('flex');
+    }
   });
 
   // Submit Form Transaksi
